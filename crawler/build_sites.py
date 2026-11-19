@@ -19,7 +19,9 @@ sys.path.insert(0, HERE)
 from import_events import listed_churches, policy_skip  # noqa: E402
 from collect import record_opted_out  # noqa: E402
 
-COUNTRIES = ["FR", "US", "GB", "CA", "CH"]
+COUNTRIES = ["FR", "US", "GB", "CA", "CH",
+             # World wave 1 (Nov 2026)
+             "DE", "BE", "AU", "BR", "CI", "CM", "CD", "SN", "BJ", "TG", "BF", "MG"]
 FIELDS = ("id", "slug", "name", "website", "cc", "region", "city", "lat", "lng")
 ROOT = os.path.dirname(HERE)
 

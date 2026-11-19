@@ -19,7 +19,10 @@ import json
 import os
 from zoneinfo import ZoneInfo
 
-FILES = {"FR": "index.json", "US": "us.json", "GB": "gb.json", "CA": "ca.json", "CH": "ch.json"}
+FILES = {"FR": "index.json", "US": "us.json", "GB": "gb.json", "CA": "ca.json", "CH": "ch.json",
+         # World wave 1 (Nov 2026): the site file is created on the first merge when it does not exist yet.
+         **{cc: f"{cc.lower()}.json" for cc in ("DE", "BE", "AU", "BR", "CI", "CM", "CD", "SN", "BJ", "TG", "BF", "MG")}}
+NEW_COUNTRIES = {"DE", "BE", "AU", "BR", "CI", "CM", "CD", "SN", "BJ", "TG", "BF", "MG"}
 STRUCTURED = {"jsonld", "ics", "tribe", "gcal"}
 
 
@@ -64,6 +67,10 @@ def main() -> int:
         return 0
     for cc, name in FILES.items():
         crawl_path, site_path = os.path.join(a.crawl, f"{cc}.json"), os.path.join(a.site, name)
+        if cc in NEW_COUNTRIES and os.path.exists(crawl_path) and not os.path.exists(site_path) and os.path.isdir(a.site):
+            with open(site_path, "w", encoding="utf-8") as fh:
+                json.dump({"updatedAt": "", "horizonDays": 60, "counts": {"total": 0}, "events": []}, fh, ensure_ascii=False, indent=1)
+                fh.write("\n")
         if not os.path.exists(crawl_path) or not os.path.exists(site_path):
             report["countries"][cc] = {"skipped": "missing-file"}
             continue

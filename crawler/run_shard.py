@@ -19,7 +19,8 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-ORDER = ["FR", "GB", "CA", "CH", "US"]
+# US last: it is the largest list and takes whatever budget is left.
+ORDER = ["FR", "GB", "CA", "CH", "DE", "BE", "AU", "BR", "CI", "CM", "CD", "SN", "BJ", "TG", "BF", "MG", "US"]
 
 
 def main() -> int:

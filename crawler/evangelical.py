@@ -545,6 +545,132 @@ def _ch_pass(rec, action, reason):
 
 
 
+
+# ---- World wave 1 (Nov 19 2026): DE, BE, AU, BR and francophone Africa ---------------------------------------------
+# Strict evidence rule, as for Switzerland: a record is kept only with positive evangelical evidence (name, free-text
+# denomination, network or website) or an unambiguous evangelical family tag. Germany and Belgium tag the
+# Landeskirche / Protestant union "denomination=evangelical", so that tag alone is not evidence there.
+WORLD_CCS = {"DE", "BE", "AU", "BR", "CI", "CM", "CD", "SN", "BJ", "TG", "BF", "MG"}
+WORLD_AFRICA = {"CI", "CM", "CD", "SN", "BJ", "TG", "BF", "MG"}
+WORLD_REMOVE = re.compile(
+    # non-Christian or non-Trinitarian / syncretic movements
+    r"jehovah|jehova|temoins? de j|salles? (?:du|des) royaumes?|zeugen jehovas|konigreichssaal|testemunhas de jeova|salao do reino"
+    r"|celeste|celestial|harriste|kimbangu|eckankar|ekancar|neo[- ]?apostolique|neuapostol|nova apostolica|new apostolic"
+    r"|\bmormon|santos dos ultimos dias|derniers jours"
+    r"|universal do reino|\biurd\b|igreja universal|^universal$|\bcatolic"
+    r"|espirita|spiritis|umbanda|candomble|vodou|vaudou"
+    # Catholic markers (fr / pt / de / nl / en / mg)
+    r"|\bparoisse\b|\bmonseigneur\b|\bmgr\b|sainte[- ]famille|sacre[- ]coeur|notre[- ]dame|cathedrale|basilique|noviciat|couvent"
+    r"|monastere|abbaye|pelerinage|pilgrimage|province ecclesiastique|coeur agonisant|\bsoeurs?\b|\bfreres (?:de|des|hospitaliers)"
+    r"|mission catholique|\bcatholi|\bkatholi|\bkath\.|\bpfarr|\bkloster\b|herz[- ]jesu|\bst\.? (?:maria|marien)\b|\bmarien(?:kirche|kapelle)"
+    r"|\bparoquia|\bmatriz\b|nossa senhora|\bsantuario|\bcatedral (?:de|da|do|metropolitana|sao)|\bbasilica|capela (?:de |do |da )?(?:sao|santo|santa|nossa)"
+    r"|\bsao (?:jose|joao|pedro|paulo|francisco|sebastiao|benedito|judas|jorge|luiz|luis|miguel|antonio|vicente|cristovao)\b"
+    r"|\bsanto antonio\b|\bsanta (?:luzia|rita|ana|barbara|clara|terezinha|teresinha|cruz|edwiges|maria|isabel)\b|divino espirito santo"
+    r"|^(?:eglise |chapelle |paroisse |temple )?saint(?:e|es|s)?[- ]|stigmates?\b|\bpresbytere\b|\baumonerie\b|spiritain|congregation du saint|\bsint[- ]|\bonze[- ]lieve[- ]vrouw|\bkapel\b|\bparochie|\bkatedraly|\bmasindahy|\bkatolika|\bfiangonana katolika|\bekar\b|jean[- ]baptiste|johann\w*[- ]baptist|joao batista|sao joao"
+    r"|^(?:igreja |capela |paroquia |matriz )?(?:de |da |do |dos )?(?:sao|santo|santa|santos|santissim[ao]|nossa senhora|senhor bom jesus|bom jesus|menino jesus|imaculad[ao]|rainha da paz)\b")
+WORLD_MAINLINE = re.compile(
+    # Germany: EKD Landeskirchen and confessional Lutherans
+    r"evangelisch[- ]lutherisch|\bev\.?[- ]?luth|evangelisch[- ]reformiert|\bev\.?[- ]?ref|(?<!landeskirchliche )\bkirchengemeinde\b"
+    r"|\bkirchgemeinde\b|(?<!landeskirchliche gemeinschaft )\blandeskirche\b|\bekd\b|\bevangelische kirche\b|\bev\. kirche\b|\bselk\b|altlutherisch"
+    r"|evangelisch[- ]methodistisch|\bemk\b|\bevangelische (?:stadt|dorf|pfarr|kreuz|christus|johannes|lukas|markus|paulus|petrus|martin|matthaus)"
+    # Belgium: United Protestant Church
+    r"|eglise protestante unie|\bepub\b|verenigde protestantse|\bvpkb\b|\bprotestantse kerk\b"
+    # Australia
+    r"|uniting church|\banglican|\blutheran|\bluther\b"
+    # Brazil
+    r"|\bluterana\b|\bieclb\b|\bielb\b|\banglicana\b|\bepiscopal anglicana|confissao luterana"
+    # Africa / Madagascar: WCC mainline Reformed, Methodist, Lutheran, Anglican bodies
+    r"|\bmethodis\w*|\bmetodista\b|\bmetodista unida|eglise evangelique du cameroun|\beec\b|presbyterienne camerounaise|eglise presbyterienne"
+    r"|eglise evangelique presbyterienne|\beept\b|\blutherienne|\banglicane|\bfjkm\b|fiangonan.?i jesoa kristy|fiangonan.?i jesosy kristy|eglise de jesus[- ]christ a madagascar"
+    r"|\bflm\b|fiangonana loterana|\bloterana\b|\bepiskopaly")
+WORLD_EVANGELICAL = re.compile(
+    # French (Belgium, Africa)
+    r"evangeli(?:que|cal|ste|sation)|assembl\w* de dieu|\bad\b|\badd\b|pentec|baptist|\bcma\b|alliance chretienne|alliance evangelique"
+    r"|plein evangile|deeper life|rachetes? de dieu|redeemed|winners?'?s? chapel|lighthouse chapel|impact centre chretien|\bicc\b|\bcmci\b"
+    r"|foursquare|quadrangulaire|vie abondante|\breveil\b|nazareen|armee du salut|salvation army|\bcepac\b|\bcbco\b|\bcbca\b|\bcbc\b|\bfepaco\b|\bcbfc\b|\bfemec\b"
+    r"|communaute (?:baptiste|evangelique|pentecotiste|des eglises (?:baptistes|evangeliques|pentecotistes|libres))|eglise (?:de dieu|apostolique)"
+    r"|eglise libre|eglises? chretiennes? (?:evangelique|biblique)|mission evangelique|centre chretien|eglise biblique|tabernacle"
+    r"|ministere (?:evangelique|chretien|international)|eglise du christ (?:roi )?(?:ministere|international)|vineyard|hillsong|calvary chapel"
+    # Dutch (Belgium)
+    r"|evangelische (?:kerk|gemeente)|evangelisch(?:e)? (?:christen)?gemeente|pinkster|vrije evangelische|volle evangelie|christengemeente"
+    r"|\bvbeg\b|\bfeb\b|\bseb\b|baptistenkerk"
+    # German
+    r"|freikirch|evangelikal|evangelisch[- ]freikirchlich|\befg\b|\bfeg\b|freie evangelische|baptisten|pfingst|\bbfp\b|mulheimer|muelheimer"
+    r"|volksmission|christliches zentrum|christus[- ]zentrum|gemeinde gottes|\belim\b|\bicf\b|gospel|biblische|bibelgemeinde|bru(?:e)?dergemeinde"
+    r"|mennonit|freie christengemeinde|evangeliums[- ]?christen|landeskirchliche gemeinschaft|evangelische gemeinschaft|\bev\. gemeinschaft"
+    r"|stadtmission|heilsarmee|calvary|foursquare|nazarener|apostolische kirche|jesus[- ]gemeinde|christengemeinde"
+    # English (Australia)
+    r"|evangelical|pentecostal|assembl(?:y|ies) of god|\bacc\b|australian christian churches|\bc3\b|planetshakers|\bcrc\b|christian revival"
+    r"|churches? of christ|christian (?:city )?church|christian (?:centre|center)|christian fellowship|community church|bible church"
+    r"|life church|new life|apostolic church|wesleyan|reformed baptist|free reformed|christian reformed|presbyterian church of (?:eastern )?australia"
+    # Portuguese (Brazil)
+    r"|evangelic|assembleia de deus|\bad\b|batista|quadrangular|pentecost|presbiteriana|congregacional|bola de neve|lagoinha|videira|\bccb\b"
+    r"|sara nossa terra|renascer|comunidade (?:evangelica|crista)|maranata|congregacao crista|deus e amor|evangelho|internacional da graca"
+    r"|apostolica|brasil para cristo|igreja de deus|nova vida|ministerio|avivamento|\bcristo vive|igreja crista"
+    # Malagasy
+    r"|pentekotista|batista|fifohazana|apokalypsy|jesosy mamonjy|\brhema\b|ara-pilazantsara|\bfaa\b|assemblees de dieu")
+WORLD_TAG_EVANGELICAL = EVANGELICAL_DEN - {"evangelical"}
+# In Germany an English name ("… Church", "… Chapel") is a free church / international congregation.
+WORLD_DE_ENGLISH = re.compile(r"\bchurch\b|\bchapel\b|\bministries\b")
+
+
+SAINT_BAPTIST = re.compile(r"(?:\bsaint|\bsint|\bst\.?|\bsan|\bsao|\bjohann\w*|\bjean|\bjohn(?: the)?|\bjoao)[- ]+(?:(?:jan|jean|john|joao|johannes)[- ]+)?(?:the[- ]+)?(?:baptist\w*|batista)")
+
+
+# Shared-vocabulary words that are not evidence on their own in these countries: "igreja" / "templo" is any church in
+# Brazil, "protestant" there and in Australia / Madagascar is mostly the historic (mainline) churches.
+WORLD_WEAK = {
+    "BR": re.compile(r"^(?:igreja|templo|temple|cristiana?|protestant\w*|reformed|reformee?s?|lutheri\w*|lutheran|methodist)$"),
+    "AU": re.compile(r"^(?:protestant\w*|temple|reformed|lutheri\w*|lutheran|methodist)$"),
+    "MG": re.compile(r"^(?:protestant\w*|reformee?s?|lutheri\w*|lutheran|methodist)$"),
+}
+
+
+def _world_text_evidence(text, cc):
+    weak = WORLD_WEAK.get(cc)
+    for m in EVANGELICAL_TEXT.finditer(text):
+        if not weak or not weak.match(m.group(0).strip()):
+            return m
+    return None
+
+
+def _world_pass(rec, action, reason):
+    """Strict evidence rule for the wave 1 countries (see WORLD_* above)."""
+    cc = rec.get("cc") or ""
+    name = fold(rec.get("name", ""))
+    text = f"{name} | {fold(rec.get('denOther', ''))} | {fold(rec.get('network', ''))}"
+    web = fold(rec.get("website", ""))
+    if action == "remove":
+        return action, reason
+    # "St John the Baptist", "Sint-Jan Baptist", "Jean-Baptiste": a saint's name, not Baptist evidence.
+    text = SAINT_BAPTIST.sub(" ", text)
+    name = SAINT_BAPTIST.sub(" ", name)
+    if (rec.get("den") or "") == "catholic" and not re.search(r"evangeli|freikirch|pentec|pfingst|assemble", name):
+        return "remove", f"tagged catholic ({cc})"
+    m = WORLD_REMOVE.search(text)
+    if m and not re.search(r"evangeli|baptist|batista|pentec|assemble", name):
+        return "remove", f"non-evangelical body or Catholic name ({cc}): " + m.group(0).strip()
+    if reason == "adventist" or ADVENTIST_TEXT.search(text):
+        return "hidden", f"adventist ({cc})"
+    m = WORLD_MAINLINE.search(text)
+    if m and not re.search(r"freikirch|evangelikal|landeskirchliche gemeinschaft|baptist|pentec|pfingst", text):
+        return "hidden", f"mainline body ({cc}): " + m.group(0).strip()
+    # Germany / Belgium: "evangelisch" and "protestant" name the Landeskirche / EPUB, so the shared French-English
+    # vocabulary (EVANGELICAL_TEXT) is not evidence there; only the WORLD_EVANGELICAL free-church vocabulary is.
+    m = WORLD_EVANGELICAL.search(text) or (cc not in {"DE", "BE"} and _world_text_evidence(text, cc)) or EVIDENCE_WEB.search(web) \
+        or (cc == "DE" and WORLD_DE_ENGLISH.search(name))
+    if m:
+        return "keep", f"evangelical evidence ({cc}): " + m.group(0).strip()
+    den = rec.get("den") or ""
+    if den in WORLD_TAG_EVANGELICAL:
+        return "keep", f"tagged {den} ({cc})"
+    if den == "evangelical" and cc not in {"DE", "BE"}:
+        return "keep", f"tagged evangelical ({cc})"
+    if den in PROTESTANT_DEN:
+        return "hidden", f"mainline body ({cc}): tagged {den}"
+    return "hidden", f"uncertain: no evangelical evidence ({cc})"
+
+
 def classify(rec):
     if rec.get("cc") == "GB":
         if re.search(r"\bjohn(?:'?s)? the baptist\b", fold(rec.get("name", ""))):
@@ -554,6 +680,8 @@ def classify(rec):
         return _ca_pass(rec, *_classify(rec))
     if rec.get("cc") == "CH":
         return _ch_pass(rec, *_classify(rec))
+    if rec.get("cc") in WORLD_CCS:
+        return _world_pass(rec, *_classify(rec))
     return _classify(rec)
 
 

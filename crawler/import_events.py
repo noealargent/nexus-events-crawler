@@ -80,8 +80,24 @@ SITE_BUDGET = 22.0  # wall-clock cap per site so one slow host cannot consume a 
 MAX_BYTES = 3_000_000
 PER_CHURCH = 12
 ALLOW_HTTP = os.environ.get("NEXUS_EVENTS_ALLOW_HTTP") == "1"   # https first; plain http only when asked (CI runner)
-COUNTRY_NAMES = {"FR": "France", "BE": "Belgique", "CH": "Suisse", "US": "United States", "CA": "Canada", "GB": "United Kingdom"}
-COUNTRY_TZ = {"FR": "Europe/Paris", "BE": "Europe/Brussels", "CH": "Europe/Zurich", "CA": "America/Toronto", "GB": "Europe/London"}
+COUNTRY_NAMES = {"FR": "France", "BE": "Belgique", "CH": "Suisse", "US": "United States", "CA": "Canada", "GB": "United Kingdom",
+                 # World wave 1 (Nov 2026)
+                 "DE": "Germany", "AU": "Australia", "BR": "Brazil", "CI": "Côte d'Ivoire", "CM": "Cameroon", "CD": "DR Congo",
+                 "SN": "Senegal", "BJ": "Benin", "TG": "Togo", "BF": "Burkina Faso", "MG": "Madagascar"}
+COUNTRY_TZ = {"FR": "Europe/Paris", "BE": "Europe/Brussels", "CH": "Europe/Zurich", "CA": "America/Toronto", "GB": "Europe/London",
+              "DE": "Europe/Berlin", "AU": "Australia/Sydney", "BR": "America/Sao_Paulo", "CI": "Africa/Abidjan", "CM": "Africa/Douala",
+              "CD": "Africa/Lubumbashi", "SN": "Africa/Dakar", "BJ": "Africa/Porto-Novo", "TG": "Africa/Lome", "BF": "Africa/Ouagadougou",
+              "MG": "Indian/Antananarivo"}
+# States / provinces that differ from the country default above.
+REGION_TZ = {
+    "AU": {"Victoria": "Australia/Melbourne", "Queensland": "Australia/Brisbane", "South Australia": "Australia/Adelaide",
+           "Western Australia": "Australia/Perth", "Tasmania": "Australia/Hobart", "Northern Territory": "Australia/Darwin",
+           "Australian Capital Territory": "Australia/Sydney", "New South Wales": "Australia/Sydney"},
+    "BR": {"Amazonas": "America/Manaus", "Acre": "America/Rio_Branco", "Rondônia": "America/Porto_Velho", "Roraima": "America/Boa_Vista",
+           "Mato Grosso": "America/Cuiaba", "Mato Grosso do Sul": "America/Campo_Grande"},
+    "CD": {name: "Africa/Kinshasa" for name in ("Kinshasa", "Kongo-Central", "Kwango", "Kwilu", "Mai-Ndombe", "Équateur", "Mongala",
+                                                 "Nord-Ubangi", "Sud-Ubangi", "Tshuapa")},
+}
 US_TZ = {
     "Alabama": "America/Chicago", "Alaska": "America/Anchorage", "Arizona": "America/Phoenix", "Arkansas": "America/Chicago",
     "California": "America/Los_Angeles", "Colorado": "America/Denver", "Connecticut": "America/New_York",
@@ -193,7 +209,8 @@ def church_tz(rec) -> ZoneInfo:
         return ZoneInfo(US_TZ.get(rec.get("region") or "", "America/Chicago"))
     if cc == "CA":
         return ZoneInfo(CA_TZ.get(rec.get("region") or "", "America/Toronto"))
-    return ZoneInfo(COUNTRY_TZ.get(cc, "Europe/Paris"))
+    region_tz = REGION_TZ.get(cc, {}).get(rec.get("region") or "")
+    return ZoneInfo(region_tz or COUNTRY_TZ.get(cc, "Europe/Paris"))
 
 
 class CachedResponse:

@@ -20,7 +20,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 from shard import shard_of  # noqa: E402
 
-COUNTRIES = ["FR", "GB", "CA", "CH", "US"]
+COUNTRIES = ["FR", "GB", "CA", "CH", "DE", "BE", "AU", "BR", "CI", "CM", "CD", "SN", "BJ", "TG", "BF", "MG", "US"]
 
 
 def main() -> int:
