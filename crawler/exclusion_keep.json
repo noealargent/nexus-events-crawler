@@ -1,0 +1,31 @@
+{
+ "_doc": "Places whose only exclusion signal is a stray denomination tag on a plainly different church, kept after review (Oct 2026). Read by scripts/osm/exclusions.py and src/nexus/osm/exclusions.test.ts. Key: directory id (n node, w way, r relation). \"drop\": places excluded on outside evidence when the name alone is ambiguous.",
+ "keep": {
+  "n6988567407": "Juniata Church of the Bretheren, tagged LDS",
+  "n358747052": "church of Christ (Moultrie GA), tagged LDS",
+  "w1276283395": "Image of Christ Missionary Church, tagged LDS",
+  "n357480544": "New Covenant Community Church, tagged LDS",
+  "w1205369515": "Walnut Gardens Community in Christ (Independence MO, Restoration branch area), tagged LDS",
+  "w1339225159": "Heartland Worship Center (Camdenton MO), tagged LDS",
+  "n354236855": "Korean Sae-Ihl Church of Jehovah, tagged JW (Korean churches name God 'Jehovah')",
+  "n12082170669": "Jehovah Jireh House of Prayer, tagged JW",
+  "n8113579316": "Jehovah Jireh Ministries, tagged JW",
+  "w211212795": "Living Testimony Ministry, tagged JW",
+  "w531072757": "Lifeway, tagged JW",
+  "n357125395": "New Beginnings Temple-Praise, tagged JW",
+  "w1306928952": "Iglesia Antioquia, tagged Iglesia ni Cristo",
+  "w1225456745": "Ministerios Ebenezer RHODE ISLAND, tagged Iglesia ni Cristo",
+  "n13537292667": "Iglesia Pentacostal La Luz del Mundo (Leominster MA): calls itself Pentecostal, La Luz del Mundo does not",
+  "w698967558": "Unity Church in Sachse, tagged Protestant: name alone does not show the Unity movement"
+ },
+ "drop": {
+  "r10521767": {
+   "group": "christian_science",
+   "why": "Christ Science Church, Austin TX: same spot as First Church of Christ, Scientist, 1309 Guadalupe St (church website)"
+  },
+  "w212209064": {
+   "group": "swedenborgian",
+   "why": "Bridgewater New Jerusalem Church, MA: Swedenborgian (website bridgewaternewchurch.org)"
+  }
+ }
+}

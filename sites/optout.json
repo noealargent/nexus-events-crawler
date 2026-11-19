@@ -1,0 +1,7 @@
+{
+ "_doc": "Churches that asked Nexus not to import their events (via « Retirer mes événements » or by email). The importer skips them entirely. churchIds / slugs match public/osm records, hosts match a website host without www.",
+ "updatedAt": "2026-11-03",
+ "churchIds": [],
+ "slugs": [],
+ "hosts": []
+}

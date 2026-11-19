@@ -1,0 +1,10 @@
+[
+  {"id": "org_charis", "slug": "charis-bible-college", "name": "Charis Bible College", "website": "https://www.charisbiblecollege.org/", "city": "Woodland Park", "cc": "US", "lat": 38.9804157, "lng": -105.0809981},
+  {"id": "org_awmi", "slug": "andrew-wommack-ministries", "name": "Andrew Wommack Ministries", "website": "https://www.awmi.net/", "city": "Woodland Park", "cc": "US", "lat": 38.9804157, "lng": -105.0809981},
+  {"id": "org_nogent", "slug": "institut-biblique-de-nogent", "name": "Institut Biblique de Nogent", "website": "https://www.ibnogent.org/", "city": "Nogent-sur-Marne", "cc": "FR", "lat": 48.8364612, "lng": 2.4781078},
+  {"id": "org_flte", "slug": "faculte-libre-de-theologie-evangelique", "name": "Faculté libre de théologie évangélique", "website": "https://flte.fr/", "city": "Vaux-sur-Seine", "cc": "FR", "lat": 49.0059, "lng": 1.960277},
+  {"id": "org_jem", "slug": "jeunesse-en-mission-france", "name": "Jeunesse en Mission France", "website": "https://jemfrance.fr/", "city": "Saint-Paul-Trois-Châteaux", "cc": "FR", "lat": 44.3361951, "lng": 4.7640295},
+  {"id": "org_portes_ouvertes", "slug": "portes-ouvertes", "name": "Portes Ouvertes", "website": "https://www.portesouvertes.fr/", "city": "Ostwald", "cc": "FR", "lat": 0, "lng": 0},
+  {"id": "org_cnef", "slug": "cnef", "name": "CNEF", "website": "https://www.lecnef.org/", "city": "Paris", "cc": "FR", "lat": 48.8354192, "lng": 2.3240239},
+  {"id": "org_samaritans_purse", "slug": "samaritans-purse", "name": "Samaritan's Purse", "website": "https://www.samaritanspurse.org/", "city": "Boone", "cc": "US", "lat": 0, "lng": 0}
+]
