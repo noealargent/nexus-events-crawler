@@ -1,14 +1,37 @@
 name: Nightly events crawl
 
-# Reads the public event pages of every listed church website (FR, GB, CA, CH, US)
-# once a night, split across parallel matrix jobs, and publishes the merged result
-# as the asset of the "nightly" release. No secrets are used: the only token is the
-# automatic GITHUB_TOKEN, with write access only in the publish job.
+# Reads the public event pages of every listed church website once a night, in each country's own
+# night: sites are grouped by time zone (crawler/tzgroups.py), and each group has its own cron so
+# its churches are read at roughly 2-4 AM local time. Each group is split across parallel matrix
+# jobs and publishes its own release asset, "nightly-<group>" (nexus-events.tar.gz + summary.json).
+# No secrets are used: the only token is the automatic GITHUB_TOKEN, with write access only in the publish job.
+#
+#   group  UTC cron (m h)  local time (winter / summer)
+#   eu-af  7 1             Paris 2:07 / 3:07, London 1:07 / 2:07, Abidjan 1:07, Kinshasa 2:07
+#   br     7 5             Brasilia 2:07
+#   na-e   7 7             New York 2:07 / 3:07
+#   na-c   7 8             Chicago 2:07 / 3:07
+#   na-m   7 9             Denver 2:07 / 3:07 (Phoenix 2:07)
+#   na-p   7 10            Los Angeles 2:07 / 3:07, Anchorage 1:07, Honolulu 0:07
+#   au-e   7 16            Sydney 3:07 / 2:07 (AEDT / AEST), Brisbane 2:07
+#   au-w   7 18            Perth 2:07
+# The Nexus site job merges each release a few hours later (see .github/workflows/nexus-nightly-events.yml there).
 on:
   schedule:
-    - cron: "30 8 * * *"   # 08:30 UTC = 01:30 America/Denver; the Nexus site job picks it up at 11:00 UTC
+    - cron: "7 1 * * *"
+    - cron: "7 5 * * *"
+    - cron: "7 7 * * *"
+    - cron: "7 8 * * *"
+    - cron: "7 9 * * *"
+    - cron: "7 10 * * *"
+    - cron: "7 16 * * *"
+    - cron: "7 18 * * *"
   workflow_dispatch:
     inputs:
+      group:
+        description: "Time-zone group to crawl: eu-af, br, na-e, na-c, na-m, na-p, au-e, au-w, or all"
+        required: false
+        default: "all"
       limit:
         description: "Max sites per country in each shard (0 = all). Use a small number for a test run."
         required: false
@@ -22,23 +45,34 @@ permissions:
   contents: read
 
 concurrency:
-  group: nightly-crawl
+  group: nightly-crawl-${{ github.event.schedule || github.event.inputs.group || 'all' }}
   cancel-in-progress: false
 
 env:
-  SHARDS: "20"
   NEXUS_EVENTS_ALLOW_HTTP: "1"
   TZ: America/Denver
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      groups: ${{ steps.plan.outputs.groups }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: plan
+        run: python3 crawler/tzgroups.py plan "${{ github.event.schedule || github.event.inputs.group || 'all' }}" >> "$GITHUB_OUTPUT"
+
   crawl:
+    needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
       fail-fast: false
       max-parallel: 20
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+        include: ${{ fromJson(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -46,45 +80,53 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: Last night's merged events (seed, so unchanged pages keep their events)
+      - name: Last night's events of this group (seed, so unchanged pages keep their events)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p previous
-          if gh release download nightly --repo "${{ github.repository }}" -p nexus-events.tar.gz -D "$RUNNER_TEMP"; then
-            tar -xzf "$RUNNER_TEMP/nexus-events.tar.gz" -C previous
-          else
-            echo "No previous nightly release yet."
-          fi
+          # "nightly-<group>"; the first night after the switch falls back to the old single "nightly" release
+          # (merge_shards keeps only this group's churches either way).
+          for tag in "nightly-${{ matrix.group }}" nightly; do
+            if gh release download "$tag" --repo "${{ github.repository }}" -p nexus-events.tar.gz -D "$RUNNER_TEMP"; then
+              tar -xzf "$RUNNER_TEMP/nexus-events.tar.gz" -C previous
+              break
+            fi
+          done
       - name: Restore ETag / Last-Modified cache for this shard
         uses: actions/cache@v4
         with:
           path: http-cache
-          key: http-cache-${{ matrix.shard }}-of-${{ env.SHARDS }}-${{ github.run_id }}
+          key: http-cache-${{ matrix.group }}-${{ matrix.shard }}-of-${{ matrix.shards }}-${{ github.run_id }}
           restore-keys: |
-            http-cache-${{ matrix.shard }}-of-${{ env.SHARDS }}-
-      - name: Crawl shard ${{ matrix.shard }}
+            http-cache-${{ matrix.group }}-${{ matrix.shard }}-of-${{ matrix.shards }}-
+      - name: Crawl ${{ matrix.group }} shard ${{ matrix.shard }}
         run: |
           python3 crawler/run_shard.py \
-            --shard "${{ matrix.shard }}" --shards "$SHARDS" \
+            --group "${{ matrix.group }}" \
+            --shard "${{ matrix.shard }}" --shards "${{ matrix.shards }}" \
             --limit "${{ github.event.inputs.limit || '0' }}" \
             --seconds "${{ github.event.inputs.seconds || '6000' }}" \
             --previous previous --work work --http-cache http-cache/http-cache.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: shard-${{ matrix.shard }}
+          name: shard-${{ matrix.group }}-${{ matrix.shard }}
           path: work/
           retention-days: 3
           if-no-files-found: warn
 
   publish:
-    needs: crawl
-    if: always()
+    needs: [plan, crawl]
+    if: always() && needs.plan.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJson(needs.plan.outputs.groups) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -92,31 +134,34 @@ jobs:
           python-version: "3.12"
       - uses: actions/download-artifact@v4
         with:
-          pattern: shard-*
+          pattern: shard-${{ matrix.group }}-*
           path: shards
       - name: Merge shards
         run: |
-          python3 crawler/merge_shards.py --shards-dir shards --shards "$SHARDS" --out merged \
+          shards=$(python3 -c "import sys; sys.path.insert(0,'crawler'); import tzgroups; print(tzgroups.GROUPS['${{ matrix.group }}']['shards'])")
+          python3 crawler/merge_shards.py --group "${{ matrix.group }}" --shards-dir shards --shards "$shards" --out merged \
             --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           tar -czf nexus-events.tar.gz -C merged .
           cp merged/summary.json summary.json
-      - name: Publish the "nightly" release asset
+      - name: Publish the "nightly-${{ matrix.group }}" release asset
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          notes="Nightly crawl $(date -u +%Y-%m-%dT%H:%MZ). Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          if gh release view nightly >/dev/null 2>&1; then
-            gh release upload nightly nexus-events.tar.gz summary.json --clobber
-            gh release edit nightly --notes "$notes"
+          tag="nightly-${{ matrix.group }}"
+          notes="Nightly crawl of group ${{ matrix.group }}, $(date -u +%Y-%m-%dT%H:%MZ). Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" nexus-events.tar.gz summary.json --clobber
+            gh release edit "$tag" --notes "$notes"
           else
-            gh release create nightly nexus-events.tar.gz summary.json --title "Nightly events" --notes "$notes" --target "${{ github.sha }}"
+            gh release create "$tag" nexus-events.tar.gz summary.json --title "Nightly events (${{ matrix.group }})" --notes "$notes" --target "${{ github.sha }}"
           fi
       - name: Job summary
         run: |
           python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json
           s = json.load(open("summary.json"))
+          print(f"### Group {s['group']}")
           print("| Country | Sites | Attempted | Finished | Read OK | Events | Missing shards |")
           print("|---|---|---|---|---|---|---|")
           for cc, v in s["countries"].items():

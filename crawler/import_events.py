@@ -61,6 +61,7 @@ sys.path.insert(0, os.path.join(ROOT, "scripts", "osm"))
 sys.path.insert(0, os.path.dirname(__file__))
 from evangelical import MAINLINE_TEXT, fold  # noqa: E402  (same rules as the directory pruning)
 from collect import dedupe_scraped, in_horizon, load_store_state, organisation_sites, record_opted_out, still_current, today_in_denver  # noqa: E402
+from tzgroups import group_of  # noqa: E402
 from coverage import (  # noqa: E402
     HOT_CAP,
     NO_SIGNAL_DAYS,
@@ -1245,6 +1246,8 @@ def main():
                     help="refresh sites already known to have an events page or feed before the rolling window")
     ap.add_argument("--matrix-shard", type=int, default=0, help="0-based shard of the church list (for a matrix job)")
     ap.add_argument("--matrix-shards", type=int, default=1, help="number of church-list shards")
+    ap.add_argument("--tz-group", default="", dest="tz_group",
+                    help="read only the sites of one time-zone group (crawler/tzgroups.py), e.g. na-e; empty = every site")
     ap.add_argument("--optout", default=os.path.join(ROOT, "public/events/optout.json"))
     ap.add_argument("--organisations", default=os.path.join(ROOT, "scripts/events/organisation-sites.json"),
                     help="evangelical organisation sites (id, slug, name, website). Empty file skips them.")
@@ -1317,6 +1320,11 @@ def main():
             skipped[why] = skipped.get(why, 0) + 1
             continue
         org_allowed.append(rec)
+    if args.tz_group:
+        def in_group(rec: dict) -> bool:
+            return group_of(rec.get("cc"), rec.get("region"), rec.get("lat"), rec.get("lng")) == args.tz_group
+        church_rows = [rec for rec in church_rows if in_group(rec)]
+        org_allowed = [rec for rec in org_allowed if in_group(rec)]
     want = {item.strip() for item in args.only.split(",") if item.strip()}
     if args.only_file and os.path.exists(args.only_file):
         listed = json.load(open(args.only_file, encoding="utf-8"))
