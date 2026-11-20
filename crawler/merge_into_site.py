@@ -104,12 +104,14 @@ def main() -> int:
         # Only churches read successfully tonight replace the site's structured rows; for the
         # rest (errors, timeouts, not reached) the site keeps its rows and gains the crawl's.
         covered = set(crawl.get("readIds") or [])
+        covered_html = set(crawl.get("htmlReadIds") or [])  # France: html agenda page read fine tonight
         before = [e for e in site.get("events") or [] if isinstance(e, dict)]
         # A group crawl owns only its own churches and organisations: the shrink guard compares those,
         # and every other group's events in the same country file are left alone.
         scope = set(crawl.get("siteIds") or []) | set(crawl.get("orgIds") or []) if group else None
         before_current = sum(1 for e in before if last_day(e) >= today and (scope is None or e.get("churchId") in scope))
-        kept = [e for e in before if last_day(e) >= today and not (e.get("churchId") in covered and structured(e.get("source")))]
+        kept = [e for e in before if last_day(e) >= today and not (e.get("churchId") in covered and structured(e.get("source")))
+                and not (e.get("churchId") in covered_html and e.get("source") == "html")]
         incoming = [e for e in crawl.get("events") or [] if isinstance(e, dict) and last_day(e) >= today]
         incoming_ids = {e.get("id") for e in incoming}
         merged, ids, keys = [], set(), set()

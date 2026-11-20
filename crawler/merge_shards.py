@@ -57,6 +57,7 @@ def main() -> int:
         events, seen = [], set()
         attempted = finished = refreshed = 0
         read_ok = set()
+        html_read = set()
         status, stopped = {}, []
         seconds = 0.0
         for shard, (folder, summary) in sorted(shard_dirs.items()):
@@ -81,6 +82,11 @@ def main() -> int:
                     continue
                 seen.add(ev.get("id"))
                 events.append(ev)
+            html_log = os.path.join(folder, "log", f"{cc}-html.json")
+            if os.path.exists(html_log):  # France: churches whose html agenda page was read fine tonight
+                for item in json.load(open(html_log, encoding="utf-8")):
+                    if owner.get(item.get("id"), 0) == shard:
+                        html_read.add(item.get("id"))
             log = os.path.join(folder, "log", f"{cc}.json")
             if os.path.exists(log):
                 for item in json.load(open(log, encoding="utf-8")):
@@ -97,7 +103,7 @@ def main() -> int:
         report["countries"][cc] = info
         with open(os.path.join(a.out, f"{cc}.json"), "w", encoding="utf-8") as fh:
             json.dump({"updatedAt": now, "country": cc, "complete": not missing,
-                       "group": a.group, "siteIds": sorted(owner), "orgIds": sorted(i for i, org_cc in group_orgs.items() if org_cc == cc), "readIds": sorted(read_ok), "events": events}, fh, ensure_ascii=False, separators=(",", ":"))
+                       "group": a.group, "siteIds": sorted(owner), "orgIds": sorted(i for i, org_cc in group_orgs.items() if org_cc == cc), "readIds": sorted(read_ok), "htmlReadIds": sorted(html_read), "events": events}, fh, ensure_ascii=False, separators=(",", ":"))
             fh.write("\n")
     with open(os.path.join(a.out, "summary.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, ensure_ascii=False, indent=1)

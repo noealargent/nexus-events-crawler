@@ -10,6 +10,7 @@ merged events (so 304 Not Modified pages keep their events) and writes:
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import shutil
@@ -22,6 +23,8 @@ ROOT = os.path.dirname(HERE)
 # US last: it is the largest list and takes whatever budget is left.
 sys.path.insert(0, HERE)
 from tzgroups import GROUPS, countries_of  # noqa: E402
+from html_merge import run_html_shard  # noqa: E402
+from collect import today_in_denver  # noqa: E402
 
 ORDER = ["FR", "GB", "CA", "CH", "DE", "BE", "AU", "BR", "CI", "CM", "CD", "SN", "BJ", "TG", "BF", "MG", "US"]
 
@@ -38,6 +41,7 @@ def main() -> int:
                     help="time-zone group (crawler/tzgroups.py): only its sites are read; empty = every site")
     ap.add_argument("--countries", default="", help="default: the group's countries, or all of them without --group")
     ap.add_argument("--limit", type=int, default=0, help="max sites per country in this shard (0 = all; for test runs)")
+    ap.add_argument("--html-seconds", type=int, default=900, help="France only: budget for the html agenda pass after the structured read (0 = skip)")
     ap.add_argument("--http-cache", default=os.path.join(ROOT, "http-cache", "http-cache.json"))
     a = ap.parse_args()
 
@@ -78,6 +82,14 @@ def main() -> int:
         t0 = time.time()
         proc = subprocess.run(cmd)
         logs = json.load(open(log, encoding="utf-8")) if os.path.exists(log) else []
+        html = None
+        if cc == "FR" and a.html_seconds > 0:
+            left_html = min(a.html_seconds, a.seconds - (time.time() - started))
+            html = run_html_shard(
+                out=out, log=log, html_log=os.path.join(log_dir, "FR-html.json"), sites_dir=os.path.join(ROOT, "sites"),
+                organisations=os.path.join(HERE, "organisation-sites.json"), optout=os.path.join(ROOT, "sites", "optout.json"),
+                today=today_in_denver(dt.datetime.now(dt.timezone.utc)),
+                seconds=int(left_html), workers=a.workers, http_cache=a.http_cache, shard=a.shard, shards=a.shards)
         statuses = {}
         for item in logs:
             statuses[item.get("status")] = statuses.get(item.get("status"), 0) + 1
@@ -90,6 +102,8 @@ def main() -> int:
             "stoppedEarly": (doc.get("batch") or {}).get("stoppedEarly", False),
             "status": statuses,
         }
+        if html is not None:
+            summary["countries"][cc]["html"] = html
     summary["seconds"] = round(time.time() - started, 1)
     json.dump(summary, open(os.path.join(a.work, "summary.json"), "w"), indent=1)
     print(json.dumps(summary, indent=1))
