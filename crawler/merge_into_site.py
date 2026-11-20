@@ -10,6 +10,12 @@ tribe, gcal, feed-*) in the site file are replaced by the crawl's events. Other
 rows are kept: churches not in the crawl, HTML-agenda rows, manual rows. A
 country is skipped (site file untouched) when the crawl is older than --max-age-hours,
 incomplete, or would shrink that country's current events by more than --max-shrink.
+
+Time-zone groups: a release such as "nightly-na-e" carries one group (summary.json "group").
+Its crawl owns only that group's churches and organisations (siteIds, orgIds): the shrink
+guard counts only those, other groups' events in the same country file are untouched, and
+the last merge of every group is kept in the one --summary file ("groups"), so a group is
+never merged twice and never blocks another group. Run the script once per group release.
 """
 from __future__ import annotations
 
@@ -61,9 +67,18 @@ def main() -> int:
             previous_merge = json.load(open(a.summary, encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             previous_merge = {}
+    group = (report.get("crawl") or {}).get("group") or ""
     stamp = (report.get("crawl") or {}).get("generatedAt")
-    if stamp and stamp == ((previous_merge.get("crawl") or {}).get("generatedAt")):
-        print(json.dumps({"skipped": "already-merged", "crawl": stamp}))
+    # Per time-zone group: each group's release is merged once, independently of the others.
+    # Older summaries (one global crawl) keep their single "crawl" stamp.
+    groups_done = dict(previous_merge.get("groups") or {})
+    if group:
+        last = (groups_done.get(group) or {}).get("generatedAt")
+    else:
+        previous_crawl = previous_merge.get("crawl") or {}
+        last = None if previous_crawl.get("group") else previous_crawl.get("generatedAt")
+    if stamp and stamp == last:
+        print(json.dumps({"skipped": "already-merged", "group": group, "crawl": stamp}))
         return 0
     for cc, name in FILES.items():
         crawl_path, site_path = os.path.join(a.crawl, f"{cc}.json"), os.path.join(a.site, name)
@@ -89,9 +104,14 @@ def main() -> int:
         # Only churches read successfully tonight replace the site's structured rows; for the
         # rest (errors, timeouts, not reached) the site keeps its rows and gains the crawl's.
         covered = set(crawl.get("readIds") or [])
+        covered_html = set(crawl.get("htmlReadIds") or [])  # France: html agenda page read fine tonight
         before = [e for e in site.get("events") or [] if isinstance(e, dict)]
-        before_current = sum(1 for e in before if last_day(e) >= today)
-        kept = [e for e in before if last_day(e) >= today and not (e.get("churchId") in covered and structured(e.get("source")))]
+        # A group crawl owns only its own churches and organisations: the shrink guard compares those,
+        # and every other group's events in the same country file are left alone.
+        scope = set(crawl.get("siteIds") or []) | set(crawl.get("orgIds") or []) if group else None
+        before_current = sum(1 for e in before if last_day(e) >= today and (scope is None or e.get("churchId") in scope))
+        kept = [e for e in before if last_day(e) >= today and not (e.get("churchId") in covered and structured(e.get("source")))
+                and not (e.get("churchId") in covered_html and e.get("source") == "html")]
         incoming = [e for e in crawl.get("events") or [] if isinstance(e, dict) and last_day(e) >= today]
         incoming_ids = {e.get("id") for e in incoming}
         merged, ids, keys = [], set(), set()
@@ -101,22 +121,38 @@ def main() -> int:
             ids.add(e.get("id"))
             keys.add(key(e))
             merged.append(e)
-        if before_current and len(merged) < before_current * (1 - a.max_shrink):
-            report["countries"][cc] = {"skipped": f"shrink {before_current} -> {len(merged)}"}
+        after_current = len(merged) if scope is None else sum(1 for e in merged if e.get("churchId") in scope)
+        if before_current and after_current < before_current * (1 - a.max_shrink):
+            report["countries"][cc] = {"skipped": f"shrink {before_current} -> {after_current}"}
             continue
         merged.sort(key=lambda e: (e.get("date") or "", e.get("city") or "", e.get("title") or "", e.get("start") or "", e.get("id") or ""))
         site["events"] = merged
-        site["updatedAt"] = crawl["updatedAt"]
-        site["publicCrawl"] = {"updatedAt": crawl["updatedAt"], "sites": len(crawl.get("siteIds") or []),
-                               "events": len(incoming)}
+        # The file's stamp is the freshest group; each group's own stamp is kept for the site's
+        # "last updated" line (a church shows the stamp of its own time-zone group).
+        site["updatedAt"] = max(crawl["updatedAt"], site.get("updatedAt") or "") if group else crawl["updatedAt"]
+        public = dict(site.get("publicCrawl") or {}) if group else {}
+        public["updatedAt"] = site["updatedAt"]
+        public["sites"] = len(crawl.get("siteIds") or [])
+        public["events"] = len(incoming)
+        if group:
+            groups = dict(public.get("groups") or {})
+            groups[group] = {"updatedAt": crawl["updatedAt"], "sites": len(crawl.get("siteIds") or []), "events": len(incoming)}
+            public["groups"] = groups
+        site["publicCrawl"] = public
         counts = dict(site.get("counts") or {})
         counts["total"] = len(merged)
         site["counts"] = counts
         with open(site_path, "w", encoding="utf-8") as fh:
             json.dump(site, fh, ensure_ascii=False, indent=1)
             fh.write("\n")
-        report["countries"][cc] = {"before": before_current, "after": len(merged), "fromCrawl": len(incoming),
+        report["countries"][cc] = {"before": before_current, "after": after_current, "fromCrawl": len(incoming),
                                    "keptOther": sum(1 for e in merged if e.get("id") not in incoming_ids)}
+    if group:
+        # Keep every group's last merge in one summary file: a run only rewrites its own group.
+        groups_done[group] = {"generatedAt": stamp, "mergedAt": report["mergedAt"], "countries": report["countries"]}
+        report["groups"] = groups_done
+        report["group"] = group
+        # A group run's report names the crawl it merged; the other groups stay under "groups".
     text = json.dumps(report, ensure_ascii=False, indent=1)
     print(text)
     if a.summary:
