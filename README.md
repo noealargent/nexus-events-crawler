@@ -11,7 +11,7 @@ Canada, Switzerland and the United States, about 24,000 church websites a night.
   `crawler/build_sites.py` from the directory data, with the evangelical policy and
   opt-outs (`sites/optout.json`) already applied.
 - `crawler/tzgroups.py` puts every site in a time-zone group, so each country is read in its own
-  night (roughly 2-4 AM local). `.github/workflows/nightly-crawl.yml` has one cron per group
+  night (roughly 2-4 AM local). `ci/nightly-crawl.yml` (copy it to `.github/workflows/nightly-crawl.yml`; a push needs the `workflow` scope) has one cron per group
   and runs it with parallel jobs. Each job owns the sites of its group whose host hashes to it
   (`crawler/shard.py`), so one host is never read by two jobs at once.
 

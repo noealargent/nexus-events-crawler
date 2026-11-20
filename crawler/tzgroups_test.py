@@ -18,7 +18,7 @@ cases = [
 for cc, region, lat, lng, want in cases:
     assert group_of(cc, region, lat, lng) == want, (cc, region, group_of(cc, region, lat, lng), want)
 assert len({g["cron"] for g in GROUPS.values()}) == len(GROUPS)
-text = open(os.path.join(ROOT, ".github", "workflows", "nightly-crawl.yml"), encoding="utf-8").read()
+text = open(os.path.join(ROOT, "ci", "nightly-crawl.yml"), encoding="utf-8").read()
 for gid, meta in GROUPS.items():
     minute, hour = meta["cron"].split()
     assert f'cron: "{minute} {hour} * * *"' in text, gid
