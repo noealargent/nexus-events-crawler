@@ -1,4 +1,7 @@
 name: Nightly events crawl
+# The run name carries the group, so the Cloudflare trigger (nexus-crawl-cron) and the guard below can tell
+# which group a run belongs to: "Nightly crawl eu-af" (dispatch) or "Nightly crawl 7 1 * * *" (GitHub schedule).
+run-name: "Nightly crawl ${{ github.event_name == 'schedule' && github.event.schedule || inputs.group || 'all' }}"
 
 # Reads the public event pages of every listed church website once a night, in each country's own
 # night: sites are grouped by time zone (crawler/tzgroups.py), and each group has its own cron so
@@ -15,6 +18,9 @@ name: Nightly events crawl
 #   na-p   7 10            Los Angeles 2:07 / 3:07, Anchorage 1:07, Honolulu 0:07
 #   au-e   7 16            Sydney 3:07 / 2:07 (AEDT / AEST), Brisbane 2:07
 #   au-w   7 18            Perth 2:07
+# Punctual trigger: the Cloudflare Worker nexus-crawl-cron dispatches each group on time (workflow_dispatch,
+# group=<id>). GitHub's own schedule below is only the fallback: it was 6-9 h late, and a scheduled run skips
+# every group whose "nightly-<group>" release is younger than 12 h or which already has a run in progress.
 # The Nexus site job merges each release a few hours later (see .github/workflows/nexus-nightly-events.yml there).
 on:
   schedule:
@@ -56,16 +62,47 @@ jobs:
   plan:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     outputs:
       groups: ${{ steps.plan.outputs.groups }}
       matrix: ${{ steps.plan.outputs.matrix }}
+      skip: ${{ steps.guard.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
       - id: plan
         run: python3 crawler/tzgroups.py plan "${{ github.event.schedule || github.event.inputs.group || 'all' }}" >> "$GITHUB_OUTPUT"
+      - name: Fallback guard (scheduled runs only; skip a group already crawled by the on-time trigger)
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GROUPS_JSON: ${{ steps.plan.outputs.groups }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "schedule" ]; then echo "skip=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          skip=false
+          for g in $(echo "$GROUPS_JSON" | jq -r '.[]'); do
+            cron=$(python3 -c "import sys; sys.path.insert(0,'crawler'); import tzgroups; print(tzgroups.GROUPS['$g']['cron'])")
+            # 1. Release asset of this group younger than 12 h -> the on-time trigger already crawled it tonight.
+            asset=$(gh api "repos/${{ github.repository }}/releases/tags/nightly-$g" \
+                      --jq '[.assets[] | select(.name=="nexus-events.tar.gz") | .updated_at][0] // empty' 2>/dev/null || true)
+            if [ -n "$asset" ]; then
+              age=$(( $(date -u +%s) - $(date -u -d "$asset" +%s) ))
+              if [ "$age" -lt 43200 ]; then echo "::notice::Group $g crawled $((age / 60)) min ago; this late scheduled run skips it."; skip=true; continue; fi
+            fi
+            # 2. Another run of the same group queued or in progress (e.g. dispatched on time, still crawling).
+            busy=$(gh api "repos/${{ github.repository }}/actions/workflows/nightly-crawl.yml/runs?per_page=50" \
+                     --jq "[.workflow_runs[] | select(.id != ${{ github.run_id }}) | select(.status==\"queued\" or .status==\"in_progress\" or .status==\"waiting\" or .status==\"pending\")
+                            | select(.display_title==\"Nightly crawl $g\" or .display_title==\"Nightly crawl all\" or .display_title==\"Nightly crawl $cron * * *\")] | length")
+            if [ "$busy" != "0" ]; then echo "::notice::Group $g already has a run in progress; this scheduled run skips it."; skip=true; fi
+          done
+          # Every schedule fires exactly one group, so skipping one group skips the run.
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
 
   crawl:
     needs: plan
+    if: needs.plan.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -118,7 +155,7 @@ jobs:
 
   publish:
     needs: [plan, crawl]
-    if: always() && needs.plan.result == 'success'
+    if: always() && needs.plan.result == 'success' && needs.plan.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
