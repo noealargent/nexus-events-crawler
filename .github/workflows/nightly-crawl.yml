@@ -22,6 +22,10 @@ run-name: "Nightly crawl ${{ github.event_name == 'schedule' && github.event.sch
 # group=<id>). GitHub's own schedule below is only the fallback: it was 6-9 h late, and a scheduled run skips
 # every group whose "nightly-<group>" release is younger than 12 h or which already has a run in progress.
 # The Nexus site job merges each release a few hours later (see .github/workflows/nexus-nightly-events.yml there).
+# Before each crawl, the refresh-sites job rebuilds sites/*.json from the live Nexus directory
+# shards (nexuschurches.com/osm/c) so churches published since the last sites commit are included.
+# If that download fails or the new list is under 90% of the committed count, the committed files are kept.
+# workflow_dispatch inputs are unchanged (the Cloudflare punctual trigger depends on them).
 on:
   schedule:
     - cron: "7 1 * * *"
@@ -100,8 +104,81 @@ jobs:
           # Every schedule fires exactly one group, so skipping one group skips the run.
           echo "skip=$skip" >> "$GITHUB_OUTPUT"
 
+  # Rebuild sites/*.json from the live directory so newly published churches are crawled tonight.
+  # Always succeeds: on failure or a suspiciously small list, the committed files are used instead.
+  refresh-sites:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      source: ${{ steps.refresh.outputs.source }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild site lists from live Nexus shards
+        id: refresh
+        run: |
+          set -euo pipefail
+          cp -a sites /tmp/sites-committed
+          restore() {
+            echo "::warning::$1 Falling back to the committed sites/*.json."
+            rm -rf sites
+            cp -a /tmp/sites-committed sites
+            echo "source=committed" >> "$GITHUB_OUTPUT"
+          }
+          SHARDS=1024
+          if ! meta=$(curl -sSfL --retry 3 --retry-delay 1 --max-time 30 "https://nexuschurches.com/osm/meta.json"); then
+            restore "Could not fetch live meta.json."
+            exit 0
+          fi
+          SHARDS=$(python3 -c "import json,os; print(int(json.loads(os.environ['META']).get('idShards') or 1024))" META="$meta")
+          mkdir -p /tmp/osm-c
+          if ! seq 0 $((SHARDS - 1)) | xargs -P 24 -I{} curl -sSfL --retry 3 --retry-delay 1 --max-time 30 -o "/tmp/osm-c/{}.json" "https://nexuschurches.com/osm/c/{}.json"; then
+            restore "Download of live directory shards failed."
+            exit 0
+          fi
+          got=$(find /tmp/osm-c -name '*.json' | wc -l)
+          if [ "$got" -ne "$SHARDS" ]; then
+            restore "Expected $SHARDS shard files, got $got."
+            exit 0
+          fi
+          if ! python3 crawler/build_sites.py /tmp/osm-c; then
+            restore "build_sites.py failed."
+            exit 0
+          fi
+          if ! python3 - "$GITHUB_OUTPUT" <<'PY'; then
+          import json, os, sys
+          countries = ["FR", "US", "GB", "CA", "CH", "DE", "BE", "AU", "BR", "CI", "CM", "CD", "SN", "BJ", "TG", "BF", "MG"]
+          def count(folder):
+              by, total = {}, 0
+              for cc in countries:
+                  path = os.path.join(folder, f"{cc}.json")
+                  n = len(json.load(open(path))) if os.path.exists(path) else 0
+                  by[cc], total = n, total + n
+              return total, by
+          old, old_by = count("/tmp/sites-committed")
+          new, new_by = count("sites")
+          ratio = 0 if old == 0 else new / old
+          print(f"committed {old} {old_by}")
+          print(f"live {new} {new_by} ratio={ratio:.3f}")
+          if new < 0.9 * old:
+              print(f"Live list is under 90% of the committed count ({new} vs {old}).")
+              sys.exit(2)
+          with open(sys.argv[1], "a", encoding="utf-8") as fh:
+              fh.write("source=live\n")
+          PY
+            restore "Live site list is under 90% of the committed count."
+            exit 0
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sites-refreshed
+          path: sites/*.json
+          if-no-files-found: error
+          retention-days: 3
+
   crawl:
-    needs: plan
+    needs: [plan, refresh-sites]
     if: needs.plan.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -112,6 +189,12 @@ jobs:
         include: ${{ fromJson(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: sites-refreshed
+          path: sites
+      - name: Site list source
+        run: echo "Using site lists from refresh-sites (${{ needs.refresh-sites.outputs.source }})."
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
