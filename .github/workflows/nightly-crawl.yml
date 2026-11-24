@@ -131,7 +131,12 @@ jobs:
             restore "Could not fetch live meta.json."
             exit 0
           fi
-          SHARDS=$(python3 -c "import json,os; print(int(json.loads(os.environ['META']).get('idShards') or 1024))" META="$meta")
+          # META must be an environment variable. A trailing META="$meta" is a Python
+          # argument, so os.environ['META'] raises KeyError and set -e exits before restore.
+          if ! SHARDS=$(META="$meta" python3 -c "import json,os; print(int(json.loads(os.environ['META']).get('idShards') or 1024))"); then
+            restore "Could not read idShards from live meta.json (META empty or missing)."
+            exit 0
+          fi
           mkdir -p /tmp/osm-c
           if ! seq 0 $((SHARDS - 1)) | xargs -P 24 -I{} curl -sSfL --retry 3 --retry-delay 1 --max-time 30 -o "/tmp/osm-c/{}.json" "https://nexuschurches.com/osm/c/{}.json"; then
             restore "Download of live directory shards failed."
